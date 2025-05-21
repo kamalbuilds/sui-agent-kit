@@ -1,22 +1,16 @@
 import "@/styles/globals.css"
 import { Metadata } from "next"
 
-import { siteConfig } from "@/frontend/config/site"
-import { fontSans } from "@/frontend/lib/fonts"
-import { cn } from "@/frontend/lib/utils"
-import { SiteHeader } from "@/frontend/components/site-header"
-import { TailwindIndicator } from "@/frontend/components/tailwind-indicator"
-import { ThemeProvider } from "@/frontend/components/theme-provider"
+import { fontSans } from "@/lib/fonts"
+import { cn } from "@/lib/utils"
+import { ThemeProvider } from "@/components/ui/theme-provider"
 
 export const metadata: Metadata = {
-  title: {
-    default: siteConfig.name,
-    template: `%s - ${siteConfig.name}`,
-  },
-  description: siteConfig.description,
+  title: "SUI Blockchain 3D Assistant",
+  description: "Chat with our 3D robot assistant about SUI blockchain",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "white" },
-    { media: "(prefers-color-scheme: dark)", color: "black" },
+    { media: "(prefers-color-scheme: light)", color: "#020617" },
+    { media: "(prefers-color-scheme: dark)", color: "#020617" },
   ],
   icons: {
     icon: "/favicon.ico",
@@ -40,12 +34,10 @@ export default function RootLayout({ children }: RootLayoutProps) {
             fontSans.variable
           )}
         >
-          <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
             <div className="relative flex min-h-screen flex-col">
-              <SiteHeader />
-              <div className="flex-1">{children}</div>
+              {children}
             </div>
-            <TailwindIndicator />
           </ThemeProvider>
         </body>
       </html>
