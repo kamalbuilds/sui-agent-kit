@@ -1,4 +1,4 @@
-import { AtomaSDK } from 'atoma-sdk';
+import { AtomaSDK } from 'atoma-ts-sdk';
 import * as dotenv from 'dotenv';
 dotenv.config();
 

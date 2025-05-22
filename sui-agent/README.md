@@ -246,7 +246,7 @@ The agent uses a standardized error response format:
 - aftermath-ts-sdk: Aftermath Finance SDK
 - @mysten/sui.js: Sui blockchain interaction
 - express: API server
-- atoma-sdk: AI capabilities
+- atoma-ts-sdk: AI capabilities
 - typescript: Type safety and development
 
 ## Contributing

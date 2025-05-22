@@ -1,6 +1,6 @@
 import { Tool, toolResponse } from '../@types/interface';
 import Atoma from '../config/atoma';
-import { AtomaSDK } from 'atoma-sdk';
+import { AtomaSDK } from 'atoma-ts-sdk';
 
 /**
  * Main tools management class that serves as a registry and orchestrator for all available tools.
