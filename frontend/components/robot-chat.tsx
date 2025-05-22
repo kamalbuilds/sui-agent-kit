@@ -5,7 +5,9 @@ import { Card, CardContent, CardFooter } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { WalletConnect } from './ui/wallet-connect';
-import suiAgentService from '@/lib/sui-agent';
+import suiAgentService, { SuiAgentResponse } from '@/lib/sui-agent';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 
 // The URL from the Spline community
 const ROBOT_SCENE_URL = 'https://app.spline.design/community/file/dcd20c6d-22e2-46c3-a22a-43c4165e61bb';
@@ -15,7 +17,9 @@ interface Message {
   content: string;
   isUser: boolean;
   timestamp: Date;
-  transactionData?: any;
+  transactionData?: SuiAgentResponse | null;
+  status?: 'success' | 'error' | 'pending';
+  responseObject?: any; // Added to handle object responses
 }
 
 export function RobotChat() {
@@ -53,6 +57,7 @@ export function RobotChat() {
           content: "Please connect your wallet first to use the SUI Agent.",
           isUser: false,
           timestamp: new Date(),
+          status: 'error'
         },
       ]);
       return;
@@ -70,58 +75,114 @@ export function RobotChat() {
 
     try {
       // Process the query using the SUI Agent service
-      const result = await suiAgentService.processQuery(inputValue);
+      const results = await suiAgentService.processQuery(inputValue);
       
-      // Format the agent's response
-      let responseContent = "I've processed your request.";
-      let transactionData = null;
-      
-      if (result && Array.isArray(result) && result.length > 0) {
-        const firstResult = result[0];
-        
-        // Check if we have a valid result object
-        if (typeof firstResult === 'object') {
-          if (firstResult.status === 'success') {
-            // Handle success responses
-            responseContent = firstResult.message || firstResult.response || 'Transaction completed successfully.';
-            transactionData = firstResult;
-          } else if (firstResult.status === 'error') {
-            // Handle error responses
-            responseContent = `I encountered an issue: ${firstResult.message || firstResult.error || 'Unable to complete the request.'}`;
-          } else {
-            // Handle other responses
-            responseContent = firstResult.response || firstResult.message || JSON.stringify(firstResult);
-          }
-        } else {
-          // Fallback for unexpected result formats
-          responseContent = `Received response: ${JSON.stringify(result)}`;
-        }
+      if (!results || results.length === 0) {
+        // Handle empty results
+        addBotMessage("I didn't receive any response from the agent. Please try again.", 'error');
+        return;
       }
       
-      // Add bot response with transaction data if available
-      const botMessage: Message = {
-        content: responseContent,
-        isUser: false,
-        timestamp: new Date(),
-        transactionData: transactionData
-      };
-      
-      setMessages((prev) => [...prev, botMessage]);
+      // Process each result and add to chat
+      results.forEach((result, index) => {
+        // Handle response format - could be string or object
+        let responseContent = '';
+        let responseObject = null;
+        
+        // Check if response is an object or a string
+        if (result.response && typeof result.response === 'object') {
+          // If it's an object, stringify it for display and keep original for data display
+          responseObject = result.response;
+          responseContent = formatResponseObject(result.response);
+        } else if (result.response && typeof result.response === 'string') {
+          // Check if response is a JSON string
+          try {
+            const parsedResponse = JSON.parse(result.response);
+            responseObject = parsedResponse;
+            responseContent = formatResponseObject(parsedResponse);
+          } catch (e) {
+            // Not a JSON string, use as is
+            responseContent = result.response || result.message || "I've processed your request.";
+          }
+        } else {
+          // Fallback to message field
+          responseContent = result.message || "I've processed your request.";
+        }
+        
+        // Add a separator for multiple responses
+        if (results.length > 1 && index > 0) {
+          responseContent = `Additional info: ${responseContent}`;
+        }
+        
+        // Add the bot message with transaction data and response object
+        addBotMessage(responseContent, result.status, result, responseObject);
+      });
     } catch (error) {
       console.error('Error processing message with SUI Agent:', error);
-      
-      // Add error message to chat
-      setMessages((prev) => [
-        ...prev,
-        {
-          content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error occurred while processing your request'}`,
-          isUser: false,
-          timestamp: new Date(),
-        },
-      ]);
+      addBotMessage(
+        `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error occurred while processing your request'}`,
+        'error'
+      );
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  // Format an object response for display
+  const formatResponseObject = (obj: any): string => {
+    if (!obj) return '';
+    
+    // Handle price response objects
+    if (obj.price !== undefined) {
+      if (obj.coin) {
+        return `The current price of ${obj.coin} is $${obj.price.toFixed(2)}`;
+      }
+      return `Price: $${obj.price.toFixed(2)}`;
+    }
+    
+    // Handle multiple coin prices in an object
+    if (typeof obj === 'object' && Object.keys(obj).length > 0) {
+      const entries = Object.entries(obj);
+      if (entries.every(([_, value]) => typeof value === 'number')) {
+        // Likely a price object with multiple coins
+        return entries
+          .map(([coin, price]) => {
+            const priceValue = price as number;
+            if (priceValue < 0) {
+              return `${coin}: Price not available`;
+            }
+            return `${coin}: $${priceValue.toFixed(2)}`;
+          })
+          .join('\n');
+      }
+    }
+    
+    // Default to JSON stringification for other objects
+    try {
+      return JSON.stringify(obj, null, 2);
+    } catch (e) {
+      return 'Object data available (see details)';
+    }
+  };
+  
+  // Helper function to add bot messages
+  const addBotMessage = (
+    content: string, 
+    status: 'success' | 'error' | 'pending' = 'success', 
+    transactionData?: SuiAgentResponse,
+    responseObject?: any
+  ) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        content,
+        isUser: false,
+        timestamp: new Date(),
+        transactionData: transactionData || null,
+        status,
+        responseObject
+      },
+    ]);
   };
 
   // Function to handle key press (for pressing Enter to send)
@@ -137,32 +198,102 @@ export function RobotChat() {
     setIsConnected(true);
     
     // Add wallet connected message
-    setMessages((prev) => [
-      ...prev,
-      {
-        content: `Wallet connected! Your address: ${address}. You can now send me instructions for SUI transactions.`,
-        isUser: false,
-        timestamp: new Date(),
-      },
-    ]);
+    addBotMessage(
+      `Wallet connected! Your address: ${address}. You can now send me instructions for SUI transactions.`,
+      'success'
+    );
   };
 
   // Render transaction data details if available
-  const renderTransactionDetails = (transactionData: any) => {
-    if (!transactionData) return null;
+  const renderTransactionDetails = (message: Message) => {
+    const { transactionData, responseObject } = message;
+    
+    if (!transactionData && !responseObject) return null;
     
     return (
-      <div className="mt-2 p-2 bg-slate-800 rounded text-xs text-slate-300 overflow-x-auto">
-        <div>Transaction Type: {transactionData.type || 'N/A'}</div>
-        {transactionData.digest && (
-          <div>Transaction ID: {transactionData.digest}</div>
+      <div className="mt-2 p-3 bg-slate-800 rounded text-xs text-slate-300 overflow-x-auto">
+        {/* Render transaction data if available */}
+        {transactionData && (
+          <div className="mb-2">
+            {transactionData.status === 'success' ? (
+              <div className="flex items-center text-green-400 mb-1">
+                <CheckCircle2 className="w-4 h-4 mr-1" /> Success
+              </div>
+            ) : transactionData.status === 'error' ? (
+              <div className="flex items-center text-red-400 mb-1">
+                <AlertCircle className="w-4 h-4 mr-1" /> Error
+              </div>
+            ) : null}
+            
+            {transactionData.type && (
+              <div>Transaction Type: {transactionData.type}</div>
+            )}
+            {transactionData.digest && (
+              <div className="truncate">Transaction ID: {transactionData.digest}</div>
+            )}
+            {transactionData.amount && (
+              <div>Amount: {transactionData.amount}</div>
+            )}
+            {transactionData.recipient && (
+              <div className="truncate">Recipient: {transactionData.recipient}</div>
+            )}
+            {transactionData.error && (
+              <div className="text-red-400">Error: {transactionData.error}</div>
+            )}
+          </div>
         )}
-        {transactionData.amount && (
-          <div>Amount: {transactionData.amount}</div>
+        
+        {/* Render response object if available */}
+        {responseObject && (
+          <div>
+            <div className="text-xs font-medium mb-1 border-t border-slate-700 pt-2 mt-2">Data Details:</div>
+            {renderObjectDetails(responseObject)}
+          </div>
         )}
-        {transactionData.recipient && (
-          <div>Recipient: {transactionData.recipient}</div>
-        )}
+      </div>
+    );
+  };
+  
+  // Helper to render object details recursively
+  const renderObjectDetails = (obj: any, level = 0): React.ReactNode => {
+    if (obj === null || obj === undefined) return <div>None</div>;
+    
+    if (typeof obj !== 'object') {
+      return <div>{String(obj)}</div>;
+    }
+    
+    if (Array.isArray(obj)) {
+      return (
+        <div className="pl-2 border-l border-slate-700">
+          {obj.map((item, index) => (
+            <div key={index} className="mb-1">
+              <span className="text-slate-400">[{index}]:</span> {
+                typeof item === 'object' ? (
+                  renderObjectDetails(item, level + 1)
+                ) : (
+                  String(item)
+                )
+              }
+            </div>
+          ))}
+        </div>
+      );
+    }
+    
+    // Object case
+    return (
+      <div className={level > 0 ? "pl-2 border-l border-slate-700" : ""}>
+        {Object.entries(obj).map(([key, value], index) => (
+          <div key={key} className="mb-1">
+            <span className="text-slate-400">{key}:</span> {
+              typeof value === 'object' ? (
+                renderObjectDetails(value, level + 1)
+              ) : (
+                String(value)
+              )
+            }
+          </div>
+        ))}
       </div>
     );
   };
@@ -197,11 +328,13 @@ export function RobotChat() {
                 className={`my-2 p-3 rounded-lg ${
                   message.isUser
                     ? 'bg-primary text-primary-foreground ml-auto'
-                    : 'bg-muted mr-auto'
-                } max-w-[80%]`}
+                    : message.status === 'error'
+                      ? 'bg-destructive/10 text-destructive mr-auto'
+                      : 'bg-muted mr-auto'
+                } max-w-[85%]`}
               >
                 <p>{message.content}</p>
-                {message.transactionData && renderTransactionDetails(message.transactionData)}
+                {renderTransactionDetails(message)}
                 <p className="text-xs text-right mt-1 opacity-70">
                   {message.timestamp.toLocaleTimeString([], {
                     hour: '2-digit',
@@ -232,7 +365,11 @@ export function RobotChat() {
                 disabled={isLoading || !isConnected}
                 className="flex-grow"
               />
-              <Button onClick={handleSendMessage} disabled={!inputValue.trim() || isLoading || !isConnected}>
+              <Button 
+                onClick={handleSendMessage} 
+                disabled={!inputValue.trim() || isLoading || !isConnected}
+                className="bg-primary hover:bg-primary/90"
+              >
                 Send
               </Button>
             </div>
