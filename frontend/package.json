@@ -14,7 +14,7 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,mdx}\" --cache"
   },
   "dependencies": {
-    "@0xkamal7/sui-agent": "^1.1.3",
+    "@0xkamal7/sui-agent": "file:../sui-agent",
     "@mysten/sui": "^1.30.0",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-slot": "^1.0.2",

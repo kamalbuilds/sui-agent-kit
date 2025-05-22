@@ -1,0 +1,18 @@
+{
+    "compilerOptions": {
+      "target": "es2020",
+      "module": "commonjs",
+      "moduleResolution": "node",
+      "esModuleInterop": true,
+      "skipLibCheck": true,
+      "forceConsistentCasingInFileNames": true,
+      "baseUrl": ".",
+      "paths": {
+        "@sui-agent/*": ["sui-agent/*/src"]
+      },
+      "composite": true,
+      "declaration": true
+    },
+    "references": [{ "path": "sui-agent" }]
+  }
+  

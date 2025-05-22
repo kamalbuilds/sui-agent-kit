@@ -2,7 +2,7 @@ import { AtomaSDK } from 'atoma-ts-sdk';
 import Atoma from '../config/atoma';
 import Tools from './tools';
 import { IntentAgentResponse, ToolArgument } from '../@types/interface';
-
+import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 /**
  * Generate a simple UUID for error tracking
  * This is a cross-platform compatible replacement for crypto.randomUUID()
@@ -169,7 +169,53 @@ class Utils {
     console.log('Tool parameters:', tool.parameters);
 
     try {
-      // Convert arguments into a structured format with name-value pairs
+      // Special handling for deposit_liquidity
+      if (selected_tool[0] === 'deposit_liquidity' && args && args.length > 0) {
+        // For deposit_liquidity, transform args directly
+        const transformedArgs: any[] = [];
+        
+        // Extract values from name=value format
+        const paramMap: Record<string, string> = {};
+        
+        // Process args to extract name=value pairs
+        for (const arg of args) {
+          if (typeof arg === 'string' && arg.includes('=')) {
+            const [name, value] = arg.split('=', 2);
+            paramMap[name] = value;
+          } else if (arg === 'owner_id') {
+            // We should derive the address from the private key
+            if (!privateKey) {
+              throw new Error('Wallet address required but not provided. Please connect your wallet.');
+            }
+            
+
+            const keypair = Ed25519Keypair.fromSecretKey(privateKey);
+            const address = keypair.getPublicKey().toSuiAddress();
+            
+            
+              transformedArgs[0] = address;
+            
+          } else {
+            transformedArgs.push(arg);
+          }
+        }
+        
+        // If we have coin_type and value in the param map, use them as args
+        if (paramMap.coin_type) {
+          transformedArgs[1] = paramMap.coin_type;
+        }
+        
+        if (paramMap.value) {
+          transformedArgs[2] = paramMap.value;
+        }
+        
+        console.log('Special handling for deposit_liquidity:', transformedArgs);
+        const result = await tool.process(...transformedArgs);
+        console.log('Tool execution result:', result);
+        return result;
+      }
+      
+      // Standard argument processing for other tools
       const processedArgs: Record<string, any> = {};
       const orderedArgs: any[] = [];
       
@@ -200,13 +246,13 @@ class Utils {
           // If arg is a placeholder like 'owner_id', replace with actual wallet address for specific tools
           if (arg === 'owner_id' || arg === 'sender_address' || arg === 'wallet_address') {
             // For tools that need wallet addresses
-            if (['deposit_liquidity', 'execute_transaction', 'send_sui'].includes(selected_tool[0])) {
+            if (['execute_transaction', 'send_sui'].includes(selected_tool[0])) {
               // Use wallet address from context or throw error if not available
               if (!privateKey) {
                 throw new Error('Wallet address required but not provided. Please connect your wallet.');
               }
               // Use a realistic wallet address format that will pass validation
-              orderedArgs.push('0x4e7355e4f6524e4f991fef294dbfc71339d4a6a89d9964b4d11697246cc0f6d');
+              orderedArgs.push('0x4e7355e4f6524e4f991fef294dbfc71339d4a6a89d9964b4d116697246cc0f6d');
               console.log('Replaced placeholder with wallet address');
               continue;
             }

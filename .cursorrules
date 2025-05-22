@@ -1,0 +1,49 @@
+{
+  "paths": {
+    "@sui-agent": "/Users/kamal/Desktop/del/sui-agent/sui-agent",
+    "@frontend": "/Users/kamal/Desktop/del/sui-agent/frontend"
+  },
+  "rules": [
+    "Most important rule: Never try to mock anything, this is a production application",
+    "You are working with a SUI blockchain agent application with a Next.js frontend.",
+    
+    "PROJECT STRUCTURE:",
+    "- @sui-agent: A TypeScript package that interfaces with the SUI blockchain",
+    "- @frontend: A Next.js application that provides UI for interacting with the SUI agent",
+    
+    "INTEGRATION GUIDELINES:",
+    "1. The SUI agent uses a pipeline architecture for processing queries:",
+      "- Query decomposition (breaks complex queries into subqueries)",
+      "- Tool selection (identifies appropriate tools for each subquery)",
+      "- Query processing (executes tools and aggregates results)",
+    
+    "2. The frontend should handle:",
+      "- Wallet connection through the SUI wallet adapter",
+      "- User input capture and processing",
+      "- Proper error handling and loading states",
+      "- Clear display of transaction results",
+    
+    "3. API Integration:",
+      "- The frontend communicates with the SUI agent through a Next.js API route",
+      "- The API route handles initialization and caching of agent instances",
+      "- Private keys should never be exposed in client-side code",
+    
+    "RESPONSE HANDLING:",
+    "- Agent responses follow a structured format with status, message, and data fields",
+    "- Special handling is needed for different response types (success, error, transaction)",
+    "- All responses should be properly typed and validated before display",
+    "- Consider using React Query or SWR for data fetching and caching",
+    
+    "ERROR HANDLING:",
+    "- Implement proper error boundaries in React components",
+    "- Handle network errors gracefully with user-friendly messages",
+    "- Log errors on the server-side for debugging",
+    "- Provide fallback UI states for failed requests",
+    
+    "PERFORMANCE CONSIDERATIONS:",
+    "- Use React.memo and useMemo for expensive computations",
+    "- Implement proper loading states and skeleton loaders",
+    "- Consider implementing infinite scrolling for chat history",
+    "- Use proper state management for complex application state"
+  ]
+} 
