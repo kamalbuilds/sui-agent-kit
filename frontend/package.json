@@ -14,7 +14,9 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,mdx}\" --cache"
   },
   "dependencies": {
-    "@0xkamal7/sui-agent": "file:../sui-agent",
+    "@0xkamal7/sui-agent": "^1.1.3",
+    "@ai-sdk/groq": "^1.2.9",
+    "@elevenlabs/elevenlabs-js": "^2.0.1",
     "@mysten/sui": "^1.30.0",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-slot": "^1.0.2",
@@ -25,6 +27,7 @@
     "clsx": "^1.2.1",
     "encoding": "^0.1.13",
     "lucide-react": "0.105.0-alpha.4",
+    "mastra": "^0.10.0",
     "next": "^13.4.8",
     "next-themes": "^0.2.1",
     "react": "^18.2.0",
@@ -35,7 +38,8 @@
     "tailwind-merge": "^1.13.2",
     "tailwindcss-animate": "^1.0.6",
     "util": "^0.12.5",
-    "vaul": "^1.1.2"
+    "vaul": "^1.1.2",
+    "zod": "^3.25.20"
   },
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "^3.7.2",

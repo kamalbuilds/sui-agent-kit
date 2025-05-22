@@ -7,7 +7,7 @@ import { Input } from './ui/input';
 import { WalletConnect } from './ui/wallet-connect';
 import suiAgentService, { SuiAgentResponse } from '@/lib/sui-agent';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Mic, MicOff } from 'lucide-react';
 
 // The URL from the Spline community
 const ROBOT_SCENE_URL = 'https://app.spline.design/community/file/dcd20c6d-22e2-46c3-a22a-43c4165e61bb';
@@ -34,7 +34,13 @@ export function RobotChat() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [walletAddress, setWalletAddress] = useState<string>('');
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [isProcessingSpeech, setIsProcessingSpeech] = useState<boolean>(false);
+  const [recordingTime, setRecordingTime] = useState<number>(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Function to scroll to the bottom of the chat
   const scrollToBottom = () => {
@@ -76,19 +82,19 @@ export function RobotChat() {
     try {
       // Process the query using the SUI Agent service
       const results = await suiAgentService.processQuery(inputValue);
-      
+
       if (!results || results.length === 0) {
         // Handle empty results
         addBotMessage("I didn't receive any response from the agent. Please try again.", 'error');
         return;
       }
-      
+
       // Process each result and add to chat
       results.forEach((result, index) => {
         // Handle response format - could be string or object
         let responseContent = '';
         let responseObject = null;
-        
+
         // Check if response is an object or a string
         if (result.response && typeof result.response === 'object') {
           // If it's an object, stringify it for display and keep original for data display
@@ -108,12 +114,12 @@ export function RobotChat() {
           // Fallback to message field
           responseContent = result.message || "I've processed your request.";
         }
-        
+
         // Add a separator for multiple responses
         if (results.length > 1 && index > 0) {
           responseContent = `Additional info: ${responseContent}`;
         }
-        
+
         // Add the bot message with transaction data and response object
         addBotMessage(responseContent, result.status, result, responseObject);
       });
@@ -127,11 +133,11 @@ export function RobotChat() {
       setIsLoading(false);
     }
   };
-  
+
   // Format an object response for display
   const formatResponseObject = (obj: any): string => {
     if (!obj) return '';
-    
+
     // Handle price response objects
     if (obj.price !== undefined) {
       if (obj.coin) {
@@ -139,7 +145,7 @@ export function RobotChat() {
       }
       return `Price: $${obj.price.toFixed(2)}`;
     }
-    
+
     // Handle multiple coin prices in an object
     if (typeof obj === 'object' && Object.keys(obj).length > 0) {
       const entries = Object.entries(obj);
@@ -156,7 +162,7 @@ export function RobotChat() {
           .join('\n');
       }
     }
-    
+
     // Default to JSON stringification for other objects
     try {
       return JSON.stringify(obj, null, 2);
@@ -164,11 +170,11 @@ export function RobotChat() {
       return 'Object data available (see details)';
     }
   };
-  
+
   // Helper function to add bot messages
   const addBotMessage = (
-    content: string, 
-    status: 'success' | 'error' | 'pending' = 'success', 
+    content: string,
+    status: 'success' | 'error' | 'pending' = 'success',
     transactionData?: SuiAgentResponse,
     responseObject?: any
   ) => {
@@ -196,7 +202,7 @@ export function RobotChat() {
   const handleWalletConnect = (address: string) => {
     setWalletAddress(address);
     setIsConnected(true);
-    
+
     // Add wallet connected message
     addBotMessage(
       `Wallet connected! Your address: ${address}. You can now send me instructions for SUI transactions.`,
@@ -204,12 +210,114 @@ export function RobotChat() {
     );
   };
 
+  // Function to format time (seconds to MM:SS)
+  const formatTime = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  // Function to start recording
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      setRecordingTime(0);
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+        await convertSpeechToText(audioBlob);
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+
+      // Start the timer
+      timerRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+    } catch (error) {
+      console.error('Error accessing microphone:', error);
+      addBotMessage('Error accessing microphone. Please check your permissions.', 'error');
+    }
+  };
+
+  // Function to stop recording
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      setIsRecording(false);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+  };
+
+  // const elevenlabs = new ElevenLabsClient({
+  //   apiKey:process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY
+  // });
+
+  // Function to convert speech to text using ElevenLabs API
+  const convertSpeechToText = async (audioBlob: Blob) => {
+    setIsProcessingSpeech(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', audioBlob);
+      formData.append('model_id', 'scribe_v1'); // Using whisper-1 as the default model
+
+      const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+        method: 'POST',
+        headers: {
+          'xi-api-key': process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY || '',
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to convert speech to text');
+      }
+
+      const data = await response.json();
+      console.log("Converted text data >>>>", data);
+
+      setInputValue(data.text || '');
+    } catch (error) {
+      console.error('Error converting speech to text:', error);
+      addBotMessage('Error converting speech to text. Please try again.', 'error');
+    } finally {
+      setIsProcessingSpeech(false);
+    }
+  };
+
+  // Cleanup timer on component unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+
   // Render transaction data details if available
   const renderTransactionDetails = (message: Message) => {
     const { transactionData, responseObject } = message;
-    
+
     if (!transactionData && !responseObject) return null;
-    
+
     return (
       <div className="mt-2 p-3 bg-slate-800 rounded text-xs text-slate-300 overflow-x-auto">
         {/* Render transaction data if available */}
@@ -224,7 +332,7 @@ export function RobotChat() {
                 <AlertCircle className="w-4 h-4 mr-1" /> Error
               </div>
             ) : null}
-            
+
             {transactionData.type && (
               <div>Transaction Type: {transactionData.type}</div>
             )}
@@ -242,7 +350,7 @@ export function RobotChat() {
             )}
           </div>
         )}
-        
+
         {/* Render response object if available */}
         {responseObject && (
           <div>
@@ -253,15 +361,15 @@ export function RobotChat() {
       </div>
     );
   };
-  
+
   // Helper to render object details recursively
   const renderObjectDetails = (obj: any, level = 0): React.ReactNode => {
     if (obj === null || obj === undefined) return <div>None</div>;
-    
+
     if (typeof obj !== 'object') {
       return <div>{String(obj)}</div>;
     }
-    
+
     if (Array.isArray(obj)) {
       return (
         <div className="pl-2 border-l border-slate-700">
@@ -279,7 +387,7 @@ export function RobotChat() {
         </div>
       );
     }
-    
+
     // Object case
     return (
       <div className={level > 0 ? "pl-2 border-l border-slate-700" : ""}>
@@ -325,13 +433,12 @@ export function RobotChat() {
             {messages.map((message, index) => (
               <div
                 key={index}
-                className={`my-2 p-3 rounded-lg ${
-                  message.isUser
-                    ? 'bg-primary text-primary-foreground ml-auto'
-                    : message.status === 'error'
-                      ? 'bg-destructive/10 text-destructive mr-auto'
-                      : 'bg-muted mr-auto'
-                } max-w-[85%]`}
+                className={`my-2 p-3 rounded-lg ${message.isUser
+                  ? 'bg-primary text-primary-foreground ml-auto'
+                  : message.status === 'error'
+                    ? 'bg-destructive/10 text-destructive mr-auto'
+                    : 'bg-muted mr-auto'
+                  } max-w-[85%]`}
               >
                 <p>{message.content}</p>
                 {renderTransactionDetails(message)}
@@ -356,18 +463,33 @@ export function RobotChat() {
           </CardContent>
 
           <CardFooter className="border-t p-4">
-            <div className="flex w-full space-x-2">
+            <div className="flex w-full space-x-2 items-center">
               <Input
                 placeholder={isConnected ? "Ask about SUI transactions..." : "Connect wallet first..."}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyPress}
-                disabled={isLoading || !isConnected}
+                disabled={isLoading || !isConnected || isProcessingSpeech}
                 className="flex-grow"
               />
-              <Button 
-                onClick={handleSendMessage} 
-                disabled={!inputValue.trim() || isLoading || !isConnected}
+              <div className="flex items-center space-x-2">
+                {isRecording && (
+                  <div className="text-sm text-red-500 font-mono">
+                    {formatTime(recordingTime)}
+                  </div>
+                )}
+                <Button
+                  onClick={isRecording ? stopRecording : startRecording}
+                  disabled={!isConnected || isLoading || isProcessingSpeech}
+                  variant="outline"
+                  className={`${isRecording ? 'bg-red-500 hover:bg-red-600' : ''}`}
+                >
+                  {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                </Button>
+              </div>
+              <Button
+                onClick={handleSendMessage}
+                disabled={!inputValue.trim() || isLoading || !isConnected || isProcessingSpeech}
                 className="bg-primary hover:bg-primary/90"
               >
                 Send
