@@ -7,7 +7,7 @@ import { Input } from './ui/input';
 import { WalletConnect } from './ui/wallet-connect';
 import suiAgentService, { SuiAgentResponse } from '@/lib/sui-agent';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, CheckCircle2, Mic, MicOff } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 
 // The URL from the Spline community
 const ROBOT_SCENE_URL = 'https://app.spline.design/community/file/dcd20c6d-22e2-46c3-a22a-43c4165e61bb';
@@ -41,6 +41,8 @@ export function RobotChat() {
   const audioChunksRef = useRef<Blob[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isAudioEnabled, setIsAudioEnabled] = useState<boolean>(true);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Function to scroll to the bottom of the chat
   const scrollToBottom = () => {
@@ -189,6 +191,11 @@ export function RobotChat() {
         responseObject
       },
     ]);
+
+    // Convert bot message to speech
+    if (status === 'success') {
+      convertTextToSpeech(content);
+    }
   };
 
   // Function to handle key press (for pressing Enter to send)
@@ -198,6 +205,12 @@ export function RobotChat() {
     }
   };
 
+  // Function to format wallet address
+  const formatAddress = (address: string): string => {
+    if (address.length <= 8) return address;
+    return `${address.slice(0, 4)}...${address.slice(-4)}`;
+  };
+
   // Handle wallet connection
   const handleWalletConnect = (address: string) => {
     setWalletAddress(address);
@@ -205,7 +218,7 @@ export function RobotChat() {
 
     // Add wallet connected message
     addBotMessage(
-      `Wallet connected! Your address: ${address}. You can now send me instructions for SUI transactions.`,
+      `Wallet connected! Your address: ${formatAddress(address)}. You can now send me instructions for SUI transactions.`,
       'success'
     );
   };
@@ -267,10 +280,6 @@ export function RobotChat() {
     }
   };
 
-  // const elevenlabs = new ElevenLabsClient({
-  //   apiKey:process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY
-  // });
-
   // Function to convert speech to text using ElevenLabs API
   const convertSpeechToText = async (audioBlob: Blob) => {
     setIsProcessingSpeech(true);
@@ -303,11 +312,69 @@ export function RobotChat() {
     }
   };
 
+  // Add text to speech function
+  const convertTextToSpeech = async (text: string) => {
+    if (!isAudioEnabled) return;
+
+    try {
+      const response = await fetch('https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM', {
+        method: 'POST',
+        headers: {
+          'Accept': 'audio/mpeg',
+          'Content-Type': 'application/json',
+          'xi-api-key': process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY || '',
+        },
+        body: JSON.stringify({
+          text: text,
+          model_id: 'eleven_monolingual_v1',
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.5
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to convert text to speech');
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      // Create and play audio
+      if (audioRef.current) {
+        audioRef.current.src = audioUrl;
+        audioRef.current.play().catch(error => {
+          console.error('Error playing audio:', error);
+        });
+      }
+    } catch (error) {
+      console.error('Error converting text to speech:', error);
+    }
+  };
+
+  // Add audio toggle function
+  const toggleAudio = () => {
+    setIsAudioEnabled(!isAudioEnabled);
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+  };
+
   // Cleanup timer on component unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+
+  // Add cleanup for audio URL
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        URL.revokeObjectURL(audioRef.current.src);
       }
     };
   }, []);
@@ -415,14 +482,28 @@ export function RobotChat() {
             scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
             className="w-full h-full"
           />
-          <div className="absolute top-4 right-4 z-10">
+          <div className="absolute top-4 right-4 z-10 flex items-center space-x-2">
             {!isConnected ? (
               <WalletConnect onConnect={handleWalletConnect} />
             ) : (
-              <div className="bg-black/50 p-2 rounded-md text-sm text-white">
-                <span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-2"></span>
-                Connected: {walletAddress.substring(0, 8)}...
-              </div>
+              <>
+                <div className="bg-black/50 p-2 rounded-md text-sm text-white">
+                  <span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-2"></span>
+                  Connected: {formatAddress(walletAddress)}
+                </div>
+                <Button
+                  onClick={toggleAudio}
+                  variant="ghost"
+                  size="icon"
+                  className="bg-black/50 hover:bg-black/70"
+                >
+                  {isAudioEnabled ? (
+                    <Volume2 className="h-4 w-4 text-white" />
+                  ) : (
+                    <VolumeX className="h-4 w-4 text-white" />
+                  )}
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -498,6 +579,7 @@ export function RobotChat() {
           </CardFooter>
         </Card>
       </div>
+      <audio ref={audioRef} className="hidden" />
     </div>
   );
 } 
