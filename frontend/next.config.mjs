@@ -27,6 +27,8 @@ const nextConfig = {
         'util': false,
         'buffer': false,
       };
+
+      config.optimization.innerGraph = false;
     }
     
     // Handle problematic modules
