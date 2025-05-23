@@ -7,7 +7,9 @@ import { Input } from './ui/input';
 import { WalletConnect } from './ui/wallet-connect';
 import suiAgentService, { SuiAgentResponse } from '@/lib/sui-agent';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, CheckCircle2, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Mic, MicOff, Volume2, VolumeX, Lightbulb } from 'lucide-react';
+import { ExamplePrompts } from './ui/example-prompts';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/modal';
 
 // The URL from the Spline community
 const ROBOT_SCENE_URL = 'https://app.spline.design/community/file/dcd20c6d-22e2-46c3-a22a-43c4165e61bb';
@@ -19,8 +21,169 @@ interface Message {
   timestamp: Date;
   transactionData?: SuiAgentResponse | null;
   status?: 'success' | 'error' | 'pending';
-  responseObject?: any; // Added to handle object responses
+  responseObject?: any;
+  isStreaming?: boolean;
+  isDemoQuery?: boolean;
 }
+
+// Component for streaming message display with realistic delays
+const StreamingMessage = ({ content, onComplete }: { content: string; onComplete?: () => void }) => {
+  const [displayedContent, setDisplayedContent] = useState('');
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isProcessingStep, setIsProcessingStep] = useState(false);
+  const [isInitialDelay, setIsInitialDelay] = useState(true);
+
+  useEffect(() => {
+    // Add 15-second initial delay before streaming starts
+    if (isInitialDelay) {
+      const initialTimer = setTimeout(() => {
+        setIsInitialDelay(false);
+      }, 15000); // 15 seconds delay
+
+      return () => clearTimeout(initialTimer);
+    }
+
+    if (!isInitialDelay && currentIndex < content.length) {
+      const currentChar = content[currentIndex];
+      let delay = 25; // Slightly slower default typing speed
+      
+      // Add longer delays for realistic transaction processing
+      if (content.substring(currentIndex).startsWith('Step ')) {
+        delay = 3000; // 3 second delay before each step
+        setIsProcessingStep(true);
+      } else if (content.substring(currentIndex).startsWith('• Transaction:')) {
+        delay = 1200; // Longer delay before showing transaction hash
+      } else if (currentChar === '\n' && content[currentIndex + 1] === '\n') {
+        delay = 800; // Longer pause between sections
+      } else if (currentChar === '✅') {
+        delay = 500; // Longer pause after success checkmark
+        setIsProcessingStep(false);
+      } else if (content.substring(currentIndex).startsWith('📊') || content.substring(currentIndex).startsWith('🎯')) {
+        delay = 2000; // Delay before summary sections
+      }
+
+      const timer = setTimeout(() => {
+        setDisplayedContent(prev => prev + currentChar);
+        setCurrentIndex(prev => prev + 1);
+      }, delay);
+
+      return () => clearTimeout(timer);
+    } else if (!isInitialDelay && onComplete) {
+      setIsProcessingStep(false);
+      onComplete();
+    }
+  }, [currentIndex, content, onComplete, isInitialDelay]);
+
+  // Format the content with better spacing between steps
+  const formatContent = (text: string) => {
+    return text
+      .split('\n\n') // Split into sections
+      .map((section, index) => {
+        const trimmedSection = section.trim();
+        
+        if (trimmedSection.startsWith('💰') || trimmedSection.startsWith('🚀')) {
+          return (
+            <div key={index} className="mb-8 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-l-4 border-blue-500 shadow-sm">
+              <div className="font-bold text-blue-900 text-lg flex items-center gap-2">
+                {trimmedSection}
+              </div>
+            </div>
+          );
+        }
+        
+        if (trimmedSection.startsWith('Step ')) {
+          const lines = trimmedSection.split('\n');
+          const stepTitle = lines[0];
+          const stepContent = lines.slice(1);
+          
+          return (
+            <div key={index} className="mb-8 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border-l-4 border-green-500 shadow-sm">
+              <div className="font-bold text-green-900 text-base mb-4 flex items-center gap-2">
+                {stepTitle}
+                {isProcessingStep && currentIndex < content.length && (
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    <span className="text-sm text-green-600">Executing...</span>
+                  </div>
+                )}
+              </div>
+              <div className="text-green-800 space-y-3">
+                {stepContent.map((line, lineIndex) => {
+                  if (line.startsWith('• Transaction:')) {
+                    return (
+                      <div key={lineIndex} className="ml-2 p-3 bg-green-100 rounded-md font-mono text-sm border border-green-200">
+                        <span className="text-green-600">🔗 Transaction: </span>
+                        <span className="text-green-800 font-semibold break-all">{line.replace('• Transaction: ', '')}</span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={lineIndex} className="ml-2 text-green-700 leading-relaxed">{line}</div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        }
+
+        if (trimmedSection.startsWith('📊') || trimmedSection.startsWith('🎯')) {
+          return (
+            <div key={index} className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border-l-4 border-purple-500 shadow-sm">
+              <div className="font-bold text-purple-900 text-base mb-4">{trimmedSection.split('\n')[0]}</div>
+              <div className="text-purple-800 space-y-2">
+                {trimmedSection.split('\n').slice(1).map((line, lineIndex) => (
+                  <div key={lineIndex} className="ml-2 leading-relaxed">{line}</div>
+                ))}
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div key={index} className="mb-6 p-3 bg-gray-50 rounded-lg">
+            <div className="space-y-2 text-gray-800">
+              {trimmedSection.split('\n').map((line, lineIndex) => (
+                <div key={lineIndex} className="leading-relaxed">{line}</div>
+              ))}
+            </div>
+          </div>
+        );
+      });
+  };
+
+  return (
+    <div className="space-y-2">
+      {isInitialDelay ? (
+        <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <div className="flex space-x-1">
+            <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce"></div>
+            <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce delay-75"></div>
+            <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce delay-150"></div>
+          </div>
+          <span className="text-blue-700 font-medium">
+            🤖 AI Agent is analyzing your request and preparing the strategy...
+          </span>
+        </div>
+      ) : (
+        <>
+          {formatContent(displayedContent)}
+          {currentIndex < content.length && (
+            <div className="flex items-center gap-3 mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-bounce delay-75"></div>
+                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-bounce delay-150"></div>
+              </div>
+              <span className="text-yellow-700 text-sm font-medium">
+                {isProcessingStep ? '⚡ Executing blockchain transaction...' : '📝 Processing strategy details...'}
+              </span>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+};
 
 export function RobotChat() {
   const [messages, setMessages] = useState<Message[]>([
@@ -93,6 +256,9 @@ export function RobotChat() {
 
       // Process each result and add to chat
       results.forEach((result, index) => {
+        // Check if this is a demo query response
+        const isDemoQuery = result.type === 'demo_query';
+        
         // Handle response format - could be string or object
         let responseContent = '';
         let responseObject = null;
@@ -123,7 +289,7 @@ export function RobotChat() {
         }
 
         // Add the bot message with transaction data and response object
-        addBotMessage(responseContent, result.status, result, responseObject);
+        addBotMessage(responseContent, result.status, result, responseObject, isDemoQuery);
       });
     } catch (error) {
       console.error('Error processing message with SUI Agent:', error);
@@ -178,7 +344,8 @@ export function RobotChat() {
     content: string,
     status: 'success' | 'error' | 'pending' = 'success',
     transactionData?: SuiAgentResponse,
-    responseObject?: any
+    responseObject?: any,
+    isDemoQuery?: boolean
   ) => {
     setMessages((prev) => [
       ...prev,
@@ -188,12 +355,13 @@ export function RobotChat() {
         timestamp: new Date(),
         transactionData: transactionData || null,
         status,
-        responseObject
+        responseObject,
+        isDemoQuery
       },
     ]);
 
-    // Convert bot message to speech
-    if (status === 'success') {
+    // Convert bot message to speech only for non-demo queries (demo queries handle this in onComplete)
+    if (status === 'success' && !isDemoQuery) {
       convertTextToSpeech(content);
     }
   };
@@ -356,9 +524,13 @@ export function RobotChat() {
   // Add audio toggle function
   const toggleAudio = () => {
     setIsAudioEnabled(!isAudioEnabled);
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
+  };
+
+  // Handle prompt selection from example prompts
+  const handlePromptSelect = (query: string) => {
+    setInputValue(query);
+    // Optionally auto-send the message
+    // handleSendMessage();
   };
 
   // Cleanup timer on component unmount
@@ -379,10 +551,10 @@ export function RobotChat() {
     };
   }, []);
 
-  // Render transaction data details if available
+  // Render transaction details for messages
   const renderTransactionDetails = (message: Message) => {
     const { transactionData, responseObject } = message;
-
+    
     if (!transactionData && !responseObject) return null;
 
     return (
@@ -400,7 +572,38 @@ export function RobotChat() {
               </div>
             ) : null}
 
-            {transactionData.type && (
+            {/* Demo query specific information */}
+            {transactionData.type === 'demo_query' && (
+              <div className="mb-2 p-2 bg-blue-900/30 rounded border border-blue-700">
+                <div className="text-blue-300 font-medium mb-1">🎯 Demo Query Response</div>
+                {transactionData.category && (
+                  <div className="mb-1">Category: <span className="text-blue-200">{transactionData.category}</span></div>
+                )}
+                {transactionData.protocols && (
+                  <div className="mb-1">
+                    Protocols: <span className="text-blue-200">{transactionData.protocols.join(', ')}</span>
+                  </div>
+                )}
+                {transactionData.executionTime && (
+                  <div className="mb-1">⚡ Execution Time: <span className="text-green-300">{transactionData.executionTime}</span></div>
+                )}
+                {transactionData.gasUsed && (
+                  <div className="mb-1">⛽ Gas Used: <span className="text-yellow-300">{transactionData.gasUsed}</span></div>
+                )}
+                {transactionData.transactionHashes && transactionData.transactionHashes.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-slate-400 mb-1">Transaction Hashes:</div>
+                    {transactionData.transactionHashes.map((hash: string, index: number) => (
+                      <div key={index} className="font-mono text-xs text-green-300 truncate">
+                        {index + 1}. {hash}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {transactionData.type && transactionData.type !== 'demo_query' && (
               <div>Transaction Type: {transactionData.type}</div>
             )}
             {transactionData.digest && (
@@ -474,10 +677,10 @@ export function RobotChat() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex flex-col md:flex-row h-full">
+    <div className="flex flex-col h-screen max-h-screen">
+      <div className="flex flex-col lg:flex-row h-full">
         {/* 3D Robot Animation */}
-        <div className="w-full md:w-1/2 h-1/2 md:h-full relative bg-slate-900 rounded-lg">
+        <div className="w-full lg:w-1/2 h-64 lg:h-full relative bg-slate-900 rounded-lg">
           <SplineScene
             scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
             className="w-full h-full"
@@ -509,7 +712,7 @@ export function RobotChat() {
         </div>
 
         {/* Chat Interface */}
-        <Card className="w-full md:w-1/2 h-1/2 md:h-full flex flex-col">
+        <Card className="w-full lg:w-1/2 h-full flex flex-col">
           <CardContent className="flex-grow overflow-y-auto p-4">
             {messages.map((message, index) => (
               <div
@@ -521,7 +724,21 @@ export function RobotChat() {
                     : 'bg-muted mr-auto'
                   } max-w-[85%]`}
               >
-                <p>{message.content}</p>
+                {/* Render message content */}
+                {message.isDemoQuery && !message.isUser ? (
+                  <StreamingMessage 
+                    content={message.content}
+                    onComplete={() => {
+                      // Convert bot message to speech after streaming completes
+                      if (message.status === 'success') {
+                        convertTextToSpeech(message.content);
+                      }
+                    }}
+                  />
+                ) : (
+                  <p className="whitespace-pre-wrap">{message.content}</p>
+                )}
+                
                 {renderTransactionDetails(message)}
                 <p className="text-xs text-right mt-1 opacity-70">
                   {message.timestamp.toLocaleTimeString([], {
@@ -531,6 +748,7 @@ export function RobotChat() {
                 </p>
               </div>
             ))}
+            
             {isLoading && (
               <div className="my-2 p-3 rounded-lg bg-muted mr-auto max-w-[80%]">
                 <div className="flex space-x-2">
@@ -554,6 +772,34 @@ export function RobotChat() {
                 className="flex-grow"
               />
               <div className="flex items-center space-x-2">
+                {/* Examples Modal Button */}
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!isConnected}
+                      className="flex items-center gap-2"
+                    >
+                      <Lightbulb className="h-4 w-4" />
+                      Examples
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-6xl">
+                    <DialogHeader>
+                      <DialogTitle>Demo Strategies</DialogTitle>
+                    </DialogHeader>
+                    <ExamplePrompts 
+                      onPromptSelect={handlePromptSelect}
+                      isConnected={isConnected}
+                      onClose={() => {
+                        // The dialog will close automatically when DialogTrigger state changes
+                        // We can add any additional cleanup here if needed
+                      }}
+                    />
+                  </DialogContent>
+                </Dialog>
+
                 {isRecording && (
                   <div className="text-sm text-red-500 font-mono">
                     {formatTime(recordingTime)}

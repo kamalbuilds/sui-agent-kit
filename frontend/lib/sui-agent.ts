@@ -10,7 +10,7 @@ export interface SuiAgentResponse {
   recipient?: string;
   response?: string;
   error?: string;
-  [key: string]: any; // For other potential fields
+  [key: string]: any;
 }
 
 class SuiAgentService {

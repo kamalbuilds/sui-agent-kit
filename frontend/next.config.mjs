@@ -22,7 +22,20 @@ const nextConfig = {
         'fs': false,
         'path': false,
         'crypto': false,
+        'encoding': false,
+        'stream': false,
+        'util': false,
+        'buffer': false,
       };
+    }
+    
+    // Handle problematic modules
+    config.externals = config.externals || [];
+    if (isServer) {
+      config.externals.push({
+        '@0xkamal7/sui-agent': '@0xkamal7/sui-agent',
+        'encoding': 'encoding'
+      });
     }
     
     return config;
@@ -30,7 +43,15 @@ const nextConfig = {
   
   // Use experimental.serverComponentsExternalPackages instead of serverExternalPackages for Next.js 13
   experimental: {
-    serverComponentsExternalPackages: ['blake2', 'atoma-sdk']
+    serverComponentsExternalPackages: [
+      'blake2', 
+      'atoma-sdk',
+      '@0xkamal7/sui-agent',
+      '@solana/web3.js',
+      'cross-fetch',
+      'node-fetch',
+      'encoding'
+    ]
   }
 }
 

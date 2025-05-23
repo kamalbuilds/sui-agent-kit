@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "b": "cd ../sui-agent && bun run build && cd ../frontend && bun i && bun run dev",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
     "preview": "next build && next start",
@@ -14,9 +15,10 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,mdx}\" --cache"
   },
   "dependencies": {
-    "@0xkamal7/sui-agent": "^1.1.3",
+    "@0xkamal7/sui-agent": "file:../sui-agent",
     "@ai-sdk/groq": "^1.2.9",
     "@elevenlabs/elevenlabs-js": "^2.0.1",
+    "@getnimbus/sui-agent-kit": "0.1.24",
     "@mysten/sui": "^1.30.0",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-slot": "^1.0.2",
@@ -25,6 +27,7 @@
     "buffer": "^6.0.3",
     "class-variance-authority": "^0.4.0",
     "clsx": "^1.2.1",
+    "crypto-browserify": "^3.12.1",
     "encoding": "^0.1.13",
     "lucide-react": "0.105.0-alpha.4",
     "mastra": "^0.10.0",
