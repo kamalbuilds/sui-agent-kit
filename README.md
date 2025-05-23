@@ -1,6 +1,6 @@
-# SUI Agent - Blockchain Assistant
+# SUI AI Agent 
 
-![SUI Agent](https://sui.io/img/sui-logo.svg)
+![SUI AI gent](https://sui.io/img/sui-logo.svg)
 
 A powerful AI-powered agent for interacting with the SUI blockchain. This project consists of two main components:
 
@@ -129,3 +129,4 @@ This project is licensed under the ISC License - see the LICENSE file for detail
 - SUI Foundation for blockchain infrastructure
 - Atoma AI for language model capabilities
 - All contributors to the various integrated protocols
+
