@@ -52,7 +52,7 @@ export function ExamplePrompts({ onPromptSelect, isConnected, onClose }: Example
   return (
     <div className="w-full max-w-6xl mx-auto">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2 text-white">
           🚀 Try These Amazing DeFi Strategies
         </h2>
         <p className="text-gray-600">
@@ -72,7 +72,7 @@ export function ExamplePrompts({ onPromptSelect, isConnected, onClose }: Example
                 <div className="flex items-center gap-2">
                   {getCategoryIcon(demo.category)}
                   <CardTitle className="text-sm font-semibold">
-                    Demo {demo.id}
+                    Strategy {demo.id}
                   </CardTitle>
                 </div>
                 <Badge className={`text-xs ${getCategoryColor(demo.category)}`}>

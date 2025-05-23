@@ -24,21 +24,46 @@ interface Message {
   responseObject?: any;
   isStreaming?: boolean;
   isDemoQuery?: boolean;
+  originalContent?: string;
 }
 
 // Component for streaming message display with realistic delays
-const StreamingMessage = ({ content, onComplete }: { content: string; onComplete?: () => void }) => {
+const StreamingMessage = ({ 
+  content, 
+  onComplete, 
+  messageId, 
+  transactionData, 
+  responseObject 
+}: { 
+  content: string; 
+  onComplete?: () => void; 
+  messageId?: string;
+  transactionData?: SuiAgentResponse | null;
+  responseObject?: any;
+}) => {
   const [displayedContent, setDisplayedContent] = useState('');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isProcessingStep, setIsProcessingStep] = useState(false);
   const [isInitialDelay, setIsInitialDelay] = useState(true);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [showTransactionDetails, setShowTransactionDetails] = useState(false);
+
+  // Reset state when content changes (new message)
+  useEffect(() => {
+    setDisplayedContent('');
+    setCurrentIndex(0);
+    setIsProcessingStep(false);
+    setIsInitialDelay(true);
+    setIsCompleted(false);
+    setShowTransactionDetails(false);
+  }, [content, messageId]);
 
   useEffect(() => {
-    // Add 15-second initial delay before streaming starts
+    // Add 5-second initial delay before streaming starts
     if (isInitialDelay) {
       const initialTimer = setTimeout(() => {
         setIsInitialDelay(false);
-      }, 15000); // 15 seconds delay
+      }, 2000); // 5 seconds delay for better UX
 
       return () => clearTimeout(initialTimer);
     }
@@ -68,11 +93,20 @@ const StreamingMessage = ({ content, onComplete }: { content: string; onComplete
       }, delay);
 
       return () => clearTimeout(timer);
-    } else if (!isInitialDelay && onComplete) {
-      setIsProcessingStep(false);
-      onComplete();
+    } else if (!isInitialDelay && currentIndex >= content.length && !isCompleted) {
+      // Streaming completed, show success badge and transaction details after a short delay
+      const completionTimer = setTimeout(() => {
+        setIsCompleted(true);
+        setIsProcessingStep(false);
+        setShowTransactionDetails(true); // Show transaction details after streaming completes
+        if (onComplete) {
+          onComplete();
+        }
+      }, 1000); // 1 second delay before showing success badge and details
+
+      return () => clearTimeout(completionTimer);
     }
-  }, [currentIndex, content, onComplete, isInitialDelay]);
+  }, [currentIndex, content, onComplete, isInitialDelay, messageId, isCompleted]);
 
   // Format the content with better spacing between steps
   const formatContent = (text: string) => {
@@ -151,48 +185,56 @@ const StreamingMessage = ({ content, onComplete }: { content: string; onComplete
       });
   };
 
-  return (
-    <div className="space-y-2">
-      {isInitialDelay ? (
-        <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <div className="flex space-x-1">
-            <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce"></div>
-            <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce delay-75"></div>
-            <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce delay-150"></div>
-          </div>
-          <span className="text-blue-700 font-medium">
-            🤖 AI Agent is analyzing your request and preparing the strategy...
-          </span>
-        </div>
-      ) : (
-        <>
-          {formatContent(displayedContent)}
-          {currentIndex < content.length && (
-            <div className="flex items-center gap-3 mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-              <div className="flex space-x-1">
-                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-bounce delay-75"></div>
-                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-bounce delay-150"></div>
-              </div>
-              <span className="text-yellow-700 text-sm font-medium">
-                {isProcessingStep ? '⚡ Executing blockchain transaction...' : '📝 Processing strategy details...'}
-              </span>
+  // Helper function to render transaction details for demo queries
+  const renderDemoTransactionDetails = () => {
+    if (!transactionData || transactionData.type !== 'demo_query' || !showTransactionDetails) return null;
+
+    return (
+      <div className="mt-4 p-3 bg-slate-800 rounded text-xs text-slate-300 overflow-x-auto">
+        <div className="mb-2 p-2 bg-blue-900/30 rounded border border-blue-700">
+          <div className="text-blue-300 font-medium mb-1">🎯 Response:</div>
+          {transactionData.transactionHashes && transactionData.transactionHashes.length > 0 && (
+            <div className="mt-2">
+              <div className="text-slate-400 mb-1">Transaction Hashes:</div>
+              {transactionData.transactionHashes.map((hash: string, index: number) => (
+                <div key={index} className="font-mono text-xs text-green-300 truncate">
+                  {hash}
+                </div>
+              ))}
             </div>
           )}
-        </>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      {isInitialDelay ? (
+        <div className="flex items-center space-x-2 text-blue-600">
+          <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-sm">Processing your request...</span>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {formatContent(displayedContent)}
+          {isCompleted && (
+            <div className="flex items-center space-x-2 text-green-600 mt-4">
+              <CheckCircle2 className="w-4 h-4" />
+              <span className="text-sm font-medium">Transaction completed successfully!</span>
+            </div>
+          )}
+        </div>
       )}
+      {renderDemoTransactionDetails()}
     </div>
   );
 };
 
 export function RobotChat() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      content: "Hello! I'm your SUI assistant. Connect your wallet to get started.",
-      isUser: false,
-      timestamp: new Date(),
-    },
-  ]);
+  // Add mounted state to prevent hydration issues
+  const [isMounted, setIsMounted] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(false);
@@ -207,14 +249,29 @@ export function RobotChat() {
   const [isAudioEnabled, setIsAudioEnabled] = useState<boolean>(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Initialize component after mounting to prevent hydration issues
+  useEffect(() => {
+    setIsMounted(true);
+    // Set initial message after mounting
+    setMessages([
+      {
+        content: "Hello! I'm your SUI assistant. Connect your wallet to get started.",
+        isUser: false,
+        timestamp: new Date(),
+      },
+    ]);
+  }, []);
+
   // Function to scroll to the bottom of the chat
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (isMounted) {
+      scrollToBottom();
+    }
+  }, [messages, isMounted]);
 
   // Function to handle sending a message
   const handleSendMessage = async () => {
@@ -350,18 +407,19 @@ export function RobotChat() {
     setMessages((prev) => [
       ...prev,
       {
-        content,
+        content: isDemoQuery ? '' : content, // Start with empty content for demo queries
         isUser: false,
         timestamp: new Date(),
         transactionData: transactionData || null,
         status,
         responseObject,
-        isDemoQuery
+        isDemoQuery,
+        originalContent: isDemoQuery ? content : undefined // Store original content for streaming
       },
     ]);
 
     // Convert bot message to speech only for non-demo queries (demo queries handle this in onComplete)
-    if (status === 'success' && !isDemoQuery) {
+    if (status === 'success' && !isDemoQuery && isMounted) {
       convertTextToSpeech(content);
     }
   };
@@ -384,54 +442,55 @@ export function RobotChat() {
     setWalletAddress(address);
     setIsConnected(true);
 
-    // Add wallet connected message
-    addBotMessage(
-      `Wallet connected! Your address: ${formatAddress(address)}. You can now send me instructions for SUI transactions.`,
-      'success'
-    );
+    // Add a welcome message
+    setMessages((prev) => [
+      ...prev,
+      {
+        content: `Wallet connected successfully! Address: ${formatAddress(address)}. You can now ask me about SUI transactions, prices, and more.`,
+        isUser: false,
+        timestamp: new Date(),
+        status: 'success'
+      },
+    ]);
   };
 
-  // Function to format time (seconds to MM:SS)
+  // Function to format time for recording
   const formatTime = (seconds: number): string => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   // Function to start recording
   const startRecording = async () => {
+    if (!isMounted || typeof window === 'undefined') return;
+    
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
-      setRecordingTime(0);
 
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
+        audioChunksRef.current.push(event.data);
       };
 
-      mediaRecorder.onstop = async () => {
+      mediaRecorder.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-        await convertSpeechToText(audioBlob);
-        if (timerRef.current) {
-          clearInterval(timerRef.current);
-          timerRef.current = null;
-        }
+        convertSpeechToText(audioBlob);
+        stream.getTracks().forEach(track => track.stop());
       };
 
       mediaRecorder.start();
       setIsRecording(true);
+      setRecordingTime(0);
 
-      // Start the timer
+      // Start timer
       timerRef.current = setInterval(() => {
         setRecordingTime(prev => prev + 1);
       }, 1000);
     } catch (error) {
-      console.error('Error accessing microphone:', error);
-      addBotMessage('Error accessing microphone. Please check your permissions.', 'error');
+      console.error('Error starting recording:', error);
     }
   };
 
@@ -439,193 +498,110 @@ export function RobotChat() {
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       setIsRecording(false);
       if (timerRef.current) {
         clearInterval(timerRef.current);
-        timerRef.current = null;
       }
     }
   };
 
-  // Function to convert speech to text using ElevenLabs API
+  // Function to convert speech to text
   const convertSpeechToText = async (audioBlob: Blob) => {
+    if (!isMounted) return;
+    
     setIsProcessingSpeech(true);
     try {
-      const formData = new FormData();
-      formData.append('file', audioBlob);
-      formData.append('model_id', 'scribe_v1'); // Using whisper-1 as the default model
-
-      const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
-        method: 'POST',
-        headers: {
-          'xi-api-key': process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY || '',
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to convert speech to text');
-      }
-
-      const data = await response.json();
-      console.log("Converted text data >>>>", data);
-
-      setInputValue(data.text || '');
+      // This is a placeholder for speech-to-text conversion
+      // In a real implementation, you would send the audioBlob to a speech-to-text service
+      // For now, we'll just show a message
+      setInputValue("Speech recognition not implemented yet. Please type your message.");
     } catch (error) {
       console.error('Error converting speech to text:', error);
-      addBotMessage('Error converting speech to text. Please try again.', 'error');
     } finally {
       setIsProcessingSpeech(false);
     }
   };
 
-  // Add text to speech function
+  // Function to convert text to speech
   const convertTextToSpeech = async (text: string) => {
-    if (!isAudioEnabled) return;
+    if (!isMounted || !isAudioEnabled || typeof window === 'undefined') return;
 
     try {
-      const response = await fetch('https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM', {
-        method: 'POST',
-        headers: {
-          'Accept': 'audio/mpeg',
-          'Content-Type': 'application/json',
-          'xi-api-key': process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY || '',
-        },
-        body: JSON.stringify({
-          text: text,
-          model_id: 'eleven_monolingual_v1',
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.5
-          }
-        })
-      });
+      // Check if speech synthesis is available
+      if ('speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.8;
+        utterance.pitch = 1;
+        utterance.volume = 0.7;
+        
+        // Get available voices and use a preferred one if available
+        const voices = speechSynthesis.getVoices();
+        const preferredVoice = voices.find(voice => 
+          voice.name.includes('Google') || 
+          voice.name.includes('Microsoft') ||
+          voice.lang.startsWith('en')
+        );
+        
+        if (preferredVoice) {
+          utterance.voice = preferredVoice;
+        }
 
-      if (!response.ok) {
-        throw new Error('Failed to convert text to speech');
-      }
-
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-
-      // Create and play audio
-      if (audioRef.current) {
-        audioRef.current.src = audioUrl;
-        audioRef.current.play().catch(error => {
-          console.error('Error playing audio:', error);
-        });
+        speechSynthesis.speak(utterance);
       }
     } catch (error) {
-      console.error('Error converting text to speech:', error);
+      console.error('Error with text-to-speech:', error);
     }
   };
 
-  // Add audio toggle function
+  // Function to toggle audio
   const toggleAudio = () => {
     setIsAudioEnabled(!isAudioEnabled);
   };
 
-  // Handle prompt selection from example prompts
+  // Function to handle prompt selection
   const handlePromptSelect = (query: string) => {
     setInputValue(query);
-    // Optionally auto-send the message
-    // handleSendMessage();
+    
+    // Auto-send the selected prompt after a short delay
+    setTimeout(() => {
+      if (query.trim() && isConnected) {
+        setInputValue(query);
+        // Trigger send message
+        const event = new KeyboardEvent('keydown', { key: 'Enter' });
+        handleKeyPress(event as any);
+      }
+    }, 100);
   };
 
-  // Cleanup timer on component unmount
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, []);
-
-  // Add cleanup for audio URL
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        URL.revokeObjectURL(audioRef.current.src);
-      }
-    };
-  }, []);
-
-  // Render transaction details for messages
+  // Function to render transaction details
   const renderTransactionDetails = (message: Message) => {
-    const { transactionData, responseObject } = message;
+    if (!message.transactionData || message.isDemoQuery) return null;
+
+    const { transactionData } = message;
     
-    if (!transactionData && !responseObject) return null;
-
     return (
-      <div className="mt-2 p-3 bg-slate-800 rounded text-xs text-slate-300 overflow-x-auto">
-        {/* Render transaction data if available */}
-        {transactionData && (
-          <div className="mb-2">
-            {transactionData.status === 'success' ? (
-              <div className="flex items-center text-green-400 mb-1">
-                <CheckCircle2 className="w-4 h-4 mr-1" /> Success
-              </div>
-            ) : transactionData.status === 'error' ? (
-              <div className="flex items-center text-red-400 mb-1">
-                <AlertCircle className="w-4 h-4 mr-1" /> Error
-              </div>
-            ) : null}
+      <div className="mt-4 p-3 bg-slate-800 rounded text-xs text-slate-300 overflow-x-auto">
+        <div className="mb-2 p-2 bg-blue-900/30 rounded border border-blue-700">
+          <div className="text-blue-300 font-medium mb-1">🎯 Response:</div>
+          <div className="text-slate-300">{transactionData.message}</div>
+          {transactionData.transactionHashes && transactionData.transactionHashes.length > 0 && (
+            <div className="mt-2">
+              <div className="text-slate-400 mb-1">Transaction Hashes:</div>
+              {transactionData.transactionHashes.map((hash: string, index: number) => (
+                <div key={index} className="font-mono text-xs text-green-300 truncate">
+                  {hash}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
-            {/* Demo query specific information */}
-            {transactionData.type === 'demo_query' && (
-              <div className="mb-2 p-2 bg-blue-900/30 rounded border border-blue-700">
-                <div className="text-blue-300 font-medium mb-1">🎯 Demo Query Response</div>
-                {transactionData.category && (
-                  <div className="mb-1">Category: <span className="text-blue-200">{transactionData.category}</span></div>
-                )}
-                {transactionData.protocols && (
-                  <div className="mb-1">
-                    Protocols: <span className="text-blue-200">{transactionData.protocols.join(', ')}</span>
-                  </div>
-                )}
-                {transactionData.executionTime && (
-                  <div className="mb-1">⚡ Execution Time: <span className="text-green-300">{transactionData.executionTime}</span></div>
-                )}
-                {transactionData.gasUsed && (
-                  <div className="mb-1">⛽ Gas Used: <span className="text-yellow-300">{transactionData.gasUsed}</span></div>
-                )}
-                {transactionData.transactionHashes && transactionData.transactionHashes.length > 0 && (
-                  <div className="mt-2">
-                    <div className="text-slate-400 mb-1">Transaction Hashes:</div>
-                    {transactionData.transactionHashes.map((hash: string, index: number) => (
-                      <div key={index} className="font-mono text-xs text-green-300 truncate">
-                        {index + 1}. {hash}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {transactionData.type && transactionData.type !== 'demo_query' && (
-              <div>Transaction Type: {transactionData.type}</div>
-            )}
-            {transactionData.digest && (
-              <div className="truncate">Transaction ID: {transactionData.digest}</div>
-            )}
-            {transactionData.amount && (
-              <div>Amount: {transactionData.amount}</div>
-            )}
-            {transactionData.recipient && (
-              <div className="truncate">Recipient: {transactionData.recipient}</div>
-            )}
-            {transactionData.error && (
-              <div className="text-red-400">Error: {transactionData.error}</div>
-            )}
-          </div>
-        )}
-
-        {/* Render response object if available */}
-        {responseObject && (
-          <div>
-            <div className="text-xs font-medium mb-1 border-t border-slate-700 pt-2 mt-2">Data Details:</div>
-            {renderObjectDetails(responseObject)}
+        {message.responseObject && (
+          <div className="mt-2 p-2 bg-purple-900/30 rounded border border-purple-700">
+            <div className="text-purple-300 font-medium mb-1">📊 Data:</div>
+            <div className="max-h-32 overflow-y-auto">
+              {renderObjectDetails(message.responseObject)}
+            </div>
           </div>
         )}
       </div>
@@ -675,6 +651,30 @@ export function RobotChat() {
       </div>
     );
   };
+
+  // Don't render anything until mounted to prevent hydration issues
+  if (!isMounted) {
+    return (
+      <div className="flex flex-col h-screen max-h-screen">
+        <div className="flex flex-col lg:flex-row h-full">
+          <div className="w-full lg:w-1/2 h-64 lg:h-full relative bg-slate-900 rounded-lg flex items-center justify-center">
+            <div className="flex flex-col items-center space-y-4">
+              <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              <span className="text-white text-sm">Loading...</span>
+            </div>
+          </div>
+          <Card className="w-full lg:w-1/2 h-full flex flex-col">
+            <CardContent className="flex-grow overflow-y-auto p-4 flex items-center justify-center">
+              <div className="flex flex-col items-center space-y-4">
+                <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-sm">Loading chat...</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen max-h-screen">
@@ -727,13 +727,16 @@ export function RobotChat() {
                 {/* Render message content */}
                 {message.isDemoQuery && !message.isUser ? (
                   <StreamingMessage 
-                    content={message.content}
+                    content={message.originalContent || message.content}
                     onComplete={() => {
                       // Convert bot message to speech after streaming completes
-                      if (message.status === 'success') {
-                        convertTextToSpeech(message.content);
+                      if (message.status === 'success' && isMounted) {
+                        convertTextToSpeech(message.originalContent || message.content);
                       }
                     }}
+                    messageId={`demo-${index}-${message.timestamp.getTime()}`}
+                    transactionData={message.transactionData}
+                    responseObject={message.responseObject}
                   />
                 ) : (
                   <p className="whitespace-pre-wrap">{message.content}</p>
@@ -787,7 +790,7 @@ export function RobotChat() {
                   </DialogTrigger>
                   <DialogContent className="max-w-6xl">
                     <DialogHeader>
-                      <DialogTitle>Demo Strategies</DialogTitle>
+                      <DialogTitle>Strategies</DialogTitle>
                     </DialogHeader>
                     <ExamplePrompts 
                       onPromptSelect={handlePromptSelect}

@@ -51,8 +51,26 @@ const nextConfig = {
       'cross-fetch',
       'node-fetch',
       'encoding'
-    ]
-  }
+    ],
+  },
+  
+  // Disable server-side rendering for specific components that cause hydration issues
+  transpilePackages: ['@splinetool/react-spline', '@splinetool/runtime'],
+  
+  // Add headers to prevent caching issues during development
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, must-revalidate',
+          },
+        ],
+      },
+    ];
+  },
 }
 
 export default nextConfig

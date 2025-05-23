@@ -1,36 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import SuiAgentModule from '@0xkamal7/sui-agent';
 import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { findDemoQuery } from '@/lib/demo-queries';
-
-// Force dynamic rendering to avoid static generation issues
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
-
-// Lazy import SuiAgentModule to avoid build-time issues
-let SuiAgentModule: any = null;
-
-const loadSuiAgent = async () => {
-  if (!SuiAgentModule) {
-    try {
-      SuiAgentModule = (await import('@0xkamal7/sui-agent')).default;
-    } catch (error) {
-      console.error('Failed to load SUI Agent:', error);
-      // Return a mock agent for development/build purposes
-      return class MockSuiAgent {
-        constructor() {}
-        async processUserQueryPipeline(query: string, address: string) {
-          return [{
-            status: 'error',
-            message: 'SUI Agent module not available. This might be a build or development environment issue.',
-            query: query
-          }];
-        }
-      };
-    }
-  }
-  return SuiAgentModule;
-};
 
 // Model configuration
 const MODEL_NAME = process.env.NEXT_PUBLIC_MODEL_NAME || "Infermatic/Llama-3.3-70B-Instruct-FP8-Dynamic";
@@ -61,42 +33,6 @@ const handlePingRequest = (senderAddress: string): ApiResponse => {
         message: 'Connection successful',
         type: 'ping',
         address: senderAddress
-      }
-    ],
-    address: senderAddress
-  };
-};
-
-// Handle demo query responses
-const handleDemoQueryRequest = (query: string, senderAddress: string): ApiResponse => {
-  const demoQuery = findDemoQuery(query);
-  
-  if (!demoQuery) {
-    return {
-      result: [{
-        status: 'error',
-        message: 'Demo query not found',
-        query: query
-      }],
-      address: senderAddress
-    };
-  }
-
-  // Format the demo response to match our API structure
-  return {
-    result: [
-      {
-        status: demoQuery.aiResponse.status,
-        message: demoQuery.aiResponse.message,
-        response: demoQuery.aiResponse.message,
-        type: 'demo_query',
-        query: query,
-        category: demoQuery.category,
-        protocols: demoQuery.protocols,
-        executionTime: demoQuery.aiResponse.executionTime,
-        gasUsed: demoQuery.aiResponse.gasUsed,
-        transactionHashes: demoQuery.aiResponse.transactionHashes,
-        demoQueryId: demoQuery.id
       }
     ],
     address: senderAddress
@@ -188,22 +124,45 @@ const normalizeResponseItem = (item: any, query: string) => {
   };
 };
 
+// Handle demo query responses
+const handleDemoQueryRequest = (query: string, senderAddress: string): ApiResponse => {
+  const demoQuery = findDemoQuery(query);
+  
+  if (!demoQuery) {
+    return {
+      result: [{
+        status: 'error',
+        message: 'Demo query not found',
+        query: query
+      }],
+      address: senderAddress
+    };
+  }
+
+  // Format the demo response to match our API structure
+  return {
+    result: [
+      {
+        status: demoQuery.aiResponse.status,
+        message: demoQuery.aiResponse.message,
+        response: demoQuery.aiResponse.message,
+        type: 'demo_query',
+        query: query,
+        category: demoQuery.category,
+        protocols: demoQuery.protocols,
+        executionTime: demoQuery.aiResponse.executionTime,
+        gasUsed: demoQuery.aiResponse.gasUsed,
+        transactionHashes: demoQuery.aiResponse.transactionHashes,
+        demoQueryId: demoQuery.id
+      }
+    ],
+    address: senderAddress
+  };
+};
+
 export async function POST(request: NextRequest) {
   try {
     const { privateKeyBech32, query } = await request.json();
-    
-    if (!privateKeyBech32) {
-      return NextResponse.json(
-        { 
-          error: 'Missing privateKeyBech32 in request body',
-          result: [{
-            status: 'error',
-            message: 'Missing private key. Please connect your wallet.'
-          }]
-        },
-        { status: 400 }
-      );
-    }
     
     if (!query) {
       return NextResponse.json(
@@ -217,29 +176,48 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // For demo queries, handle them without requiring wallet connection
+    const demoQuery = findDemoQuery(query);
+    if (demoQuery) {
+      return NextResponse.json(handleDemoQueryRequest(query, 'demo-address'));
+    }
+
+    // For all other queries (including ping), we need a private key
+    if (!privateKeyBech32) {
+      return NextResponse.json(
+        { 
+          error: 'Missing privateKeyBech32 in request body',
+          result: [{
+            status: 'error',
+            message: 'Missing private key. Please connect your wallet.'
+          }]
+        },
+        { status: 400 }
+      );
+    }
     
-    // Get or create agent instance
+    // Get or create agent instance and derive the real wallet address
     let agentData = agentInstances.get(privateKeyBech32);
     let senderAddress = '';
     let agent;
     
     if (!agentData) {
-      // Decode the Bech32 private key
+      // Decode the Bech32 private key and derive the real address
       try {
         const { secretKey } = decodeSuiPrivateKey(privateKeyBech32);
         const privateKeyHex = Buffer.from(secretKey).toString('hex');
         
-        // Create a keypair and get the address
+        // Create a keypair and get the REAL address
         const keypair = Ed25519Keypair.fromSecretKey(secretKey);
         senderAddress = keypair.getPublicKey().toSuiAddress();
         
-        // Load and initialize the agent
-        const SuiAgent = await loadSuiAgent();
-        agent = new SuiAgent(ATOMA_API_KEY, MODEL_NAME, privateKeyHex);
+        // Initialize the agent with the real private key
+        agent = new SuiAgentModule(ATOMA_API_KEY, MODEL_NAME, privateKeyHex);
         
-        console.log('Agent initialized successfully');
+        console.log('Agent initialized successfully for address:', senderAddress);
         
-        // Cache the agent instance
+        // Cache the agent instance with the real address
         agentInstances.set(privateKeyBech32, { agent, senderAddress });
       } catch (error) {
         console.error('Error initializing SUI Agent:', error);
@@ -257,25 +235,20 @@ export async function POST(request: NextRequest) {
         );
       }
     } else {
+      // Use cached agent and real address
       agent = agentData.agent;
       senderAddress = agentData.senderAddress;
     }
     
-    // Special handling for ping requests
+    // Handle ping requests with the REAL wallet address
     if (query === 'ping') {
       return NextResponse.json(handlePingRequest(senderAddress));
     }
     
-    // Check for demo query matches first
-    const demoQuery = findDemoQuery(query);
-    if (demoQuery) {
-      return NextResponse.json(handleDemoQueryRequest(query, senderAddress));
-    }
-    
-    // Process the query with error handling
+    // Process the query with error handling using the real agent and address
     const result = await safelyProcessResponse(agent, query, senderAddress);
     
-    // Return response with properly formatted result
+    // Return response with the REAL wallet address
     return NextResponse.json({
       result,
       address: senderAddress

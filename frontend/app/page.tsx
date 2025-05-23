@@ -1,4 +1,17 @@
-import { RobotChat } from "@/components/robot-chat";
+import nextDynamic from 'next/dynamic';
+
+// Dynamically import RobotChat with no SSR to prevent hydration issues
+const RobotChat = nextDynamic(() => import("@/components/robot-chat").then(mod => ({ default: mod.RobotChat })), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-full">
+      <div className="flex flex-col items-center space-y-4">
+        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        <span className="text-white text-sm">Loading SUI Assistant...</span>
+      </div>
+    </div>
+  )
+});
 
 // Force dynamic rendering to avoid static generation issues with SUI agent
 export const dynamic = 'force-dynamic';
