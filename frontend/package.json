@@ -15,7 +15,7 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,mdx}\" --cache"
   },
   "dependencies": {
-    "@0xkamal7/sui-agent": "file:../sui-agent",
+    "@0xkamal7/sui-agent": "^1.1.5",
     "@ai-sdk/groq": "^1.2.9",
     "@elevenlabs/elevenlabs-js": "^2.0.1",
     "@getnimbus/sui-agent-kit": "0.1.24",
